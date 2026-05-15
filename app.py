@@ -3014,17 +3014,23 @@ async def post_init(app: Application):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# FLASK WEBHOOK  (Vercel entrypoint)
+# FLASK WEBHOOK ENTRYPOINT  (Vercel serverless)
+# Fixes:
+#   ✅ asyncio.new_event_loop() — works on Python 3.10/3.11/3.12
+#   ✅ Sync Flask routes — Vercel WSGI runtime doesn't support async def
+#   ✅ Lazy init with _loop.run_until_complete() for all async calls
 # ─────────────────────────────────────────────────────────────────────────────
 import asyncio as _asyncio
-from flask import Flask as _Flask, Response as _Response, request as _request
+from flask import Flask as _Flask, Response as _Response, request as _request, jsonify as _jsonify
 
-_flask_app = _Flask(__name__)
+# ── One persistent event loop for the lifetime of the container ───────────────
+_loop = _asyncio.new_event_loop()
+_asyncio.set_event_loop(_loop)
 
 
 def _build_telegram_app():
-    """Build and register all handlers — same as original main() minus polling."""
-    tg_app = Application.builder().token(BOT_TOKEN).updater(None).post_init(post_init).build()
+    """Register all handlers and return an initialised Application."""
+    tg = Application.builder().token(BOT_TOKEN).updater(None).post_init(post_init).build()
 
     # Conversations
     onboard_conv = ConversationHandler(
@@ -3056,104 +3062,138 @@ def _build_telegram_app():
             CallbackQueryHandler(setup_entry, pattern=r"^c_adv_setup$"),
         ],
         states={
-            SETUP_CHANNEL:      [MessageHandler(filters.TEXT & ~filters.COMMAND, setup_recv_channels)],
-            SETUP_MAT_TYPE:     [CallbackQueryHandler(setup_recv_mtype, pattern=r"^mtype_")],
-            SETUP_MAT_TITLE:    [MessageHandler(filters.TEXT & ~filters.COMMAND, setup_recv_title)],
-            SETUP_MAT_CONTENT:  [MessageHandler(
+            SETUP_CHANNEL:     [MessageHandler(filters.TEXT & ~filters.COMMAND, setup_recv_channels)],
+            SETUP_MAT_TYPE:    [CallbackQueryHandler(setup_recv_mtype, pattern=r"^mtype_")],
+            SETUP_MAT_TITLE:   [MessageHandler(filters.TEXT & ~filters.COMMAND, setup_recv_title)],
+            SETUP_MAT_CONTENT: [MessageHandler(
                 (filters.TEXT | filters.PHOTO | filters.VIDEO | filters.Document.ALL) & ~filters.COMMAND,
                 setup_recv_content)],
-            SETUP_REF_COUNT:    [MessageHandler(filters.TEXT & ~filters.COMMAND, setup_recv_referral)],
+            SETUP_REF_COUNT:   [MessageHandler(filters.TEXT & ~filters.COMMAND, setup_recv_referral)],
         },
         fallbacks=[CommandHandler("cancel", setup_cancel),
                    CallbackQueryHandler(setup_cancel, pattern=r"^setup_cancel$")],
         per_message=False, allow_reentry=True,
     )
 
-    tg_app.add_handler(onboard_conv)
-    tg_app.add_handler(createcamp_conv)
-    tg_app.add_handler(setup_conv)
+    tg.add_handler(onboard_conv)
+    tg.add_handler(createcamp_conv)
+    tg.add_handler(setup_conv)
 
-    tg_app.add_handler(CommandHandler("start",          cmd_start))
-    tg_app.add_handler(CommandHandler("id",             cmd_id))
-    tg_app.add_handler(CommandHandler("help",           cmd_help))
-    tg_app.add_handler(CommandHandler("creator",        cmd_creator))
-    tg_app.add_handler(CommandHandler("dashboard",      cmd_dashboard))
-    tg_app.add_handler(CommandHandler("mycampaigns",    cmd_mycampaigns))
-    tg_app.add_handler(CommandHandler("mystats",        cmd_mystats))
-    tg_app.add_handler(CommandHandler("materials",      cmd_materials))
-    tg_app.add_handler(CommandHandler("channels",       cmd_channels))
-    tg_app.add_handler(CommandHandler("togglecampaign", cmd_togglecampaign))
-    tg_app.add_handler(CommandHandler("admin",          cmd_admin))
-    tg_app.add_handler(CommandHandler("broadcast",      cmd_broadcast))
-    tg_app.add_handler(CommandHandler("globalstats",    cmd_globalstats))
-    tg_app.add_handler(CommandHandler("addcreator",     cmd_addcreator))
-    tg_app.add_handler(CommandHandler("removecreator",  cmd_removecreator))
-    tg_app.add_handler(CommandHandler("viewuser",       cmd_viewuser))
-    tg_app.add_handler(CommandHandler("viewcreator",    cmd_viewcreator))
-    tg_app.add_handler(CommandHandler("listcreators",   cmd_listcreators))
-    tg_app.add_handler(CommandHandler("listusers",      cmd_listusers))
-    tg_app.add_handler(CommandHandler("dm",             cmd_dm))
-    tg_app.add_handler(CommandHandler("delcampaign",    cmd_delcampaign))
-    tg_app.add_handler(CommandHandler("setprice",       cmd_setprice))
-    tg_app.add_handler(CommandHandler("setupi",         cmd_setupi))
-    tg_app.add_handler(CommandHandler("addadmin",       cmd_addadmin))
-    tg_app.add_handler(CommandHandler("export",         cmd_export))
+    tg.add_handler(CommandHandler("start",          cmd_start))
+    tg.add_handler(CommandHandler("id",             cmd_id))
+    tg.add_handler(CommandHandler("help",           cmd_help))
+    tg.add_handler(CommandHandler("creator",        cmd_creator))
+    tg.add_handler(CommandHandler("dashboard",      cmd_dashboard))
+    tg.add_handler(CommandHandler("mycampaigns",    cmd_mycampaigns))
+    tg.add_handler(CommandHandler("mystats",        cmd_mystats))
+    tg.add_handler(CommandHandler("materials",      cmd_materials))
+    tg.add_handler(CommandHandler("channels",       cmd_channels))
+    tg.add_handler(CommandHandler("togglecampaign", cmd_togglecampaign))
+    tg.add_handler(CommandHandler("admin",          cmd_admin))
+    tg.add_handler(CommandHandler("broadcast",      cmd_broadcast))
+    tg.add_handler(CommandHandler("globalstats",    cmd_globalstats))
+    tg.add_handler(CommandHandler("addcreator",     cmd_addcreator))
+    tg.add_handler(CommandHandler("removecreator",  cmd_removecreator))
+    tg.add_handler(CommandHandler("viewuser",       cmd_viewuser))
+    tg.add_handler(CommandHandler("viewcreator",    cmd_viewcreator))
+    tg.add_handler(CommandHandler("listcreators",   cmd_listcreators))
+    tg.add_handler(CommandHandler("listusers",      cmd_listusers))
+    tg.add_handler(CommandHandler("dm",             cmd_dm))
+    tg.add_handler(CommandHandler("delcampaign",    cmd_delcampaign))
+    tg.add_handler(CommandHandler("setprice",       cmd_setprice))
+    tg.add_handler(CommandHandler("setupi",         cmd_setupi))
+    tg.add_handler(CommandHandler("addadmin",       cmd_addadmin))
+    tg.add_handler(CommandHandler("export",         cmd_export))
 
-    tg_app.add_handler(CallbackQueryHandler(cb_verify,  pattern=r"^verify_"))
-    tg_app.add_handler(CallbackQueryHandler(cb_user,    pattern=r"^u_"))
-    tg_app.add_handler(CallbackQueryHandler(cb_creator, pattern=r"^c_"))
-    tg_app.add_handler(CallbackQueryHandler(cb_admin,   pattern=r"^(a_|bcast_)"))
-    tg_app.add_handler(ChatMemberHandler(handle_my_chat_member, ChatMemberHandler.MY_CHAT_MEMBER))
-    tg_app.add_handler(MessageHandler(
+    tg.add_handler(CallbackQueryHandler(cb_verify,  pattern=r"^verify_"))
+    tg.add_handler(CallbackQueryHandler(cb_user,    pattern=r"^u_"))
+    tg.add_handler(CallbackQueryHandler(cb_creator, pattern=r"^c_"))
+    tg.add_handler(CallbackQueryHandler(cb_admin,   pattern=r"^(a_|bcast_)"))
+    tg.add_handler(ChatMemberHandler(handle_my_chat_member, ChatMemberHandler.MY_CHAT_MEMBER))
+    tg.add_handler(MessageHandler(
         (filters.TEXT | filters.PHOTO | filters.VIDEO | filters.Document.ALL) & ~filters.COMMAND,
         general_message_handler))
-    tg_app.add_handler(MessageHandler(filters.COMMAND, cmd_unknown))
-    tg_app.add_error_handler(error_handler)
-    return tg_app
+    tg.add_handler(MessageHandler(filters.COMMAND, cmd_unknown))
+    tg.add_error_handler(error_handler)
+
+    return tg
 
 
-# Build once at module load (Vercel reuses warm containers)
+# Build + initialise once at container startup
 _tg_app = _build_telegram_app()
-_asyncio.get_event_loop().run_until_complete(_tg_app.initialize())
+_loop.run_until_complete(_tg_app.initialize())
+logger.info("✅ Telegram app initialised in webhook mode")
+
+# ── Flask app ─────────────────────────────────────────────────────────────────
+_flask_app = _Flask(__name__)
 
 
 @_flask_app.get("/")
 def _health():
+    """Health check — confirms the bot is running."""
     s = db.global_stats()
-    return {"status": "ok", "bot": "ForceHub",
-            "users": s["total_users"], "creators": s["total_creators"],
-            "campaigns": s["total_campaigns"]}
+    return _jsonify({
+        "status":    "ok",
+        "bot":       "ForceHub",
+        "mode":      "webhook",
+        "users":     s["total_users"],
+        "creators":  s["total_creators"],
+        "campaigns": s["total_campaigns"],
+    })
 
 
 @_flask_app.post("/webhook")
-async def _webhook():
+def _webhook():
+    """
+    Telegram POSTs every update here.
+    Sync route — uses _loop.run_until_complete() to run async PTB code.
+    """
     try:
-        data   = _request.get_json(force=True)
+        data   = _request.get_json(force=True, silent=True)
+        if not data:
+            return _Response("bad request", status=400)
         update = Update.de_json(data, _tg_app.bot)
-        await _tg_app.process_update(update)
+        _loop.run_until_complete(_tg_app.process_update(update))
         return _Response("ok", status=200)
     except Exception as e:
-        logger.error("Webhook error: %s", e, exc_info=True)
+        logger.error("Webhook processing error: %s", e, exc_info=True)
         return _Response("error", status=500)
 
 
 @_flask_app.get("/set_webhook")
-async def _set_webhook():
-    """Visit this URL once after deploying to register the webhook."""
+def _set_webhook():
+    """
+    Visit this URL once after deploying to register the webhook.
+    https://join-unlock-bot.vercel.app/set_webhook
+    """
     webhook_url = os.getenv("WEBHOOK_URL", "").rstrip("/")
     if not webhook_url:
-        return {"error": "Set WEBHOOK_URL env var in Vercel dashboard first"}, 400
-    url    = f"{webhook_url}/webhook"
-    result = await _tg_app.bot.set_webhook(url=url, allowed_updates=Update.ALL_TYPES,
-                                            drop_pending_updates=True)
-    return {"registered": result, "webhook_url": url}
+        return _jsonify({"error": "Set WEBHOOK_URL in Vercel environment variables first"}), 400
+
+    full_url = f"{webhook_url}/webhook"
+
+    async def _do():
+        return await _tg_app.bot.set_webhook(
+            url=full_url,
+            allowed_updates=Update.ALL_TYPES,
+            drop_pending_updates=True,
+        )
+
+    try:
+        result = _loop.run_until_complete(_do())
+        return _jsonify({"registered": result, "webhook_url": full_url})
+    except Exception as e:
+        return _jsonify({"error": str(e)}), 500
 
 
 @_flask_app.get("/delete_webhook")
-async def _delete_webhook():
-    result = await _tg_app.bot.delete_webhook(drop_pending_updates=True)
-    return {"deleted": result}
+def _delete_webhook():
+    """Remove webhook before switching back to polling."""
+    async def _do():
+        return await _tg_app.bot.delete_webhook(drop_pending_updates=True)
+    result = _loop.run_until_complete(_do())
+    return _jsonify({"deleted": result})
 
 
-# ── Vercel WSGI entrypoint — must be named `app` ──────────────────────────────
+# ── Vercel WSGI entrypoint — MUST be named `app` ─────────────────────────────
 app = _flask_app
