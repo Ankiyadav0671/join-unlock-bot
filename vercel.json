@@ -11,11 +11,5 @@
       "src": "/(.*)",
       "dest": "app.py"
     }
-  ],
-  "env": {
-    "BOT_TOKEN":    "@bot_token",
-    "ADMIN_IDS":    "@admin_ids",
-    "WEBHOOK_URL":  "@webhook_url",
-    "DATA_DIR":     "/tmp"
-  }
+  ]
 }
