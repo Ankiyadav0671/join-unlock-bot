@@ -1,250 +1,121 @@
-# 🚀 ForceHub Bot
+# ForceHub Bot — Vercel Deployment Guide
 
-**Force Subscribe + Content Unlock Platform for Telegram**
+## ⚠️ Important: Vercel vs Railway
 
-> Built with `python-telegram-bot v21` · Async · Railway-ready
+| Feature          | Vercel              | Railway ✅ Recommended |
+|------------------|---------------------|------------------------|
+| Bot mode         | Webhook (serverless)| Polling (always-on)    |
+| Data persistence | ❌ Resets on redeploy| ✅ Persistent volume   |
+| Free tier        | Generous            | $5/month after trial   |
+| Setup complexity | Medium              | Simple                 |
 
----
-
-## ✨ Features
-
-| System | Description |
-|---|---|
-| 🔐 Force Subscribe | Users must join channel(s) to unlock content |
-| 📦 Material Types | Text, Photo, Video, Document/PDF |
-| 👥 Referral System | Optional referral count requirement per campaign |
-| 📣 Admin Broadcast | Broadcast to Users / Creators / Everyone with media + buttons |
-| 📣 Creator Broadcast | Creators message only their own audience |
-| ⏱ Trial System | Configurable free trial for creators (default 90 days) |
-| 📊 Analytics | Track clicks, verifications, unlocks, referrals per campaign |
-| 🛡 Admin Panel | Full control: add/ban creators, set price/UPI/trial |
-| 💾 Auto Storage | JSON files auto-created in `/app/data/` |
+**If data persistence matters, use Railway.**  
+Vercel's filesystem is ephemeral — bot data resets every redeploy.
 
 ---
 
-## 📁 File Structure
+## Files
 
 ```
 forcehub/
-├── bot.py              # Main bot (all systems)
-├── requirements.txt    # Dependencies
-├── .env.example        # Environment variable template
-├── .env                # Your actual config (don't commit!)
-└── README.md           # This file
-```
-
-Data files (auto-created):
-```
-/app/data/
-├── forcehub_data.json    # All users, creators, campaigns, analytics
-└── forcehub_config.json  # Bot version/config metadata
+├── app.py           ← Vercel entrypoint (Flask webhook handler)
+├── bot.py           ← All bot logic (unchanged)
+├── vercel.json      ← Vercel build + routing config
+├── requirements.txt ← Dependencies (includes Flask)
+├── .env.example     ← Environment variable template
+└── README.md        ← This file
 ```
 
 ---
 
-## ⚙️ Setup
+## Step-by-Step Deploy
 
-### 1. Clone & Install
-
+### 1. Push to GitHub
 ```bash
-git clone <your-repo>
-cd forcehub
-pip install -r requirements.txt
+git init
+git add .
+git commit -m "ForceHub Bot"
+git remote add origin https://github.com/yourusername/forcehub-bot
+git push -u origin main
 ```
 
-### 2. Configure Environment
+### 2. Deploy on Vercel
+- Go to [vercel.com](https://vercel.com) → New Project
+- Import your GitHub repo
+- Framework: **Other**
+- Root directory: `.` (leave default)
 
-```bash
-cp .env.example .env
-nano .env
+### 3. Set Environment Variables
+In Vercel Dashboard → Your Project → Settings → Environment Variables:
+
+| Name          | Value                                        |
+|---------------|----------------------------------------------|
+| `BOT_TOKEN`   | Your bot token from @BotFather               |
+| `ADMIN_IDS`   | `5695957392` (your Telegram ID)              |
+| `WEBHOOK_URL` | Leave blank for now (set after first deploy) |
+| `DATA_DIR`    | `/tmp`                                       |
+
+### 4. Deploy
+Click **Deploy**. Wait for it to finish.
+
+### 5. Set WEBHOOK_URL
+After deploy, copy your Vercel URL (e.g. `https://forcehub-abc.vercel.app`)
+
+Go back to Environment Variables → Add:
+- `WEBHOOK_URL` = `https://forcehub-abc.vercel.app`
+
+Redeploy once more (Vercel Dashboard → Deployments → Redeploy).
+
+### 6. Register Webhook with Telegram
+Open this URL in your browser:
+```
+https://your-app.vercel.app/set_webhook
 ```
 
-Fill in:
-- `BOT_TOKEN` — from [@BotFather](https://t.me/BotFather)
-- `ADMIN_IDS` — your Telegram user ID (get from [@userinfobot](https://t.me/userinfobot))
-- `DATA_DIR` — where to store JSON data (default: `/app/data`)
-
-### 3. Run Locally
-
-```bash
-python bot.py
+You should see:
+```json
+{"set_webhook": true, "url": "https://your-app.vercel.app/webhook"}
 ```
 
-For local development, set `DATA_DIR=./data` in your `.env`.
+✅ **Your bot is now live!**
 
 ---
 
-## 🚂 Deploy on Railway
-
-1. Push code to GitHub
-2. Create new Railway project → **Deploy from GitHub**
-3. Set environment variables in Railway dashboard:
-   - `BOT_TOKEN`
-   - `ADMIN_IDS`
-   - `DATA_DIR` = `/app/data`
-4. Add a **Volume** mounted at `/app/data` (so data persists across deploys)
-5. Railway will auto-detect Python and run `python bot.py`
-
-> ⚠️ **Important:** Without a mounted volume, data resets on every deploy!
-
----
-
-## 🤖 Bot Commands
-
-### 👤 User Commands
-| Command | Description |
-|---|---|
-| `/start` | Open main menu |
-
-### 🎨 Creator Commands
-| Command | Description |
-|---|---|
-| `/setup` | Create a new campaign (5-step wizard) |
-| `/mycampaigns` | View all your campaigns + stats |
-| `/materials` | List your materials |
-| `/channels` | List your channels |
-| `/broadcast_my_users` | Broadcast to users who unlocked your content |
-| `/renewpanel` | Renew expired creator subscription |
-
-### 🛡️ Admin Commands
-| Command | Description |
-|---|---|
-| `/globalstats` | View total users, creators, campaigns, today's activity |
-| `/broadcast` | Broadcast to Users / Creators / Everyone |
-| `/addcreator <id> [name]` | Add a creator or renew existing |
-| `/bancreator <id>` | Ban/expire a creator |
-| `/settrial <days>` | Set global trial days (e.g. `/settrial 90`) |
-| `/setprice <amount>` | Set renewal price in ₹ |
-| `/setupi <upi_id>` | Set UPI ID for payments |
-| `/export` | Export full data as JSON |
-
----
-
-## 🔗 Campaign Link Format
-
-```
-https://t.me/<BotUsername>?start=<CAMPAIGN_ID>
-```
-
-Example:
-```
-https://t.me/ForceHubBot?start=AB12CD34
-```
-
-### Referral Link Format
-```
-https://t.me/<BotUsername>?start=ref_<UserID>
-```
-
----
-
-## 📊 Database Structure (JSON)
-
+## Health Check
+Visit `https://your-app.vercel.app/` to see:
 ```json
 {
-  "users": {
-    "<user_id>": {
-      "username": "",
-      "first_name": "",
-      "joined_at": "ISO timestamp",
-      "unlocked_campaigns": ["CAMP_ID"],
-      "referral_count": 0,
-      "referred_by": null,
-      "banned": false
-    }
-  },
-  "creators": {
-    "<creator_id>": {
-      "name": "",
-      "trial_start": "ISO timestamp",
-      "trial_days": 90,
-      "channels": ["@channel"],
-      "materials": ["material_id"],
-      "campaigns": ["CAMP_ID"]
-    }
-  },
-  "materials": {
-    "<material_id>": {
-      "creator_id": "",
-      "title": "",
-      "description": "",
-      "file_id": null,
-      "file_type": "text|photo|video|document"
-    }
-  },
-  "campaigns": {
-    "<CAMP_ID>": {
-      "creator_id": "",
-      "material_id": "",
-      "channels": ["@channel"],
-      "referral_required": 0,
-      "is_active": true
-    }
-  },
-  "analytics": {
-    "campaign_clicks": { "<CAMP_ID>": 42 },
-    "verification_success": {},
-    "unlock_success": {},
-    "referral_unlocks": {},
-    "daily": {
-      "2026-04-14": { "joins": 10, "unlocks": 5 }
-    }
-  },
-  "settings": {
-    "trial_days": 90,
-    "upi_id": "yourname@upi",
-    "price": 199,
-    "admin_ids": [123456789]
-  }
+  "status": "ok",
+  "bot": "ForceHub",
+  "users": 0,
+  "creators": 0,
+  "campaigns": 0
 }
 ```
 
 ---
 
-## 🔐 Security Features
-
-- ✅ Bot validates it's admin in the channel before accepting it
-- ✅ Duplicate campaign ID prevention (UUID-based)
-- ✅ Fake referral loop prevention (can't refer yourself)
-- ✅ Expired creator access blocked on `/setup`, `/materials`, `/channels`
-- ✅ Broadcast permission strictly checked (admin-only / creator-own-users)
-- ✅ Content delivery only after verified channel membership
+## Switching back to Railway / Polling
+Before switching, delete the webhook:
+```
+https://your-app.vercel.app/delete_webhook
+```
+Then redeploy on Railway using the original `bot.py` directly.
 
 ---
 
-## 📣 Broadcast — Supported Content
+## Troubleshooting
 
-| Type | Supported |
-|---|---|
-| Text | ✅ |
-| Photo + Caption | ✅ |
-| Video + Caption | ✅ |
-| Document/PDF + Caption | ✅ |
-| Inline Buttons | ✅ |
-| Delivery Stats | ✅ |
+**Bot not responding:**
+- Check that you visited `/set_webhook` after deploy
+- Verify `BOT_TOKEN` is correct in Vercel env vars
+- Check Vercel function logs (Dashboard → Functions tab)
 
-**Button format:**
-```
-Button Name - https://url.com
-Another Button - https://url2.com
-```
+**Data lost after redeploy:**
+- Expected on Vercel — use Railway for persistent storage
+- Or connect an external database (PlanetScale, Supabase, etc.)
 
----
-
-## 🛠 Performance Notes
-
-- JSON loaded **once** on startup, cached in memory
-- Dirty writes saved to disk every **30 seconds** (background task)
-- Broadcast uses `asyncio.sleep(0.05)` between sends to respect Telegram limits
-- All handlers are fully **async**
-
----
-
-## 📞 Support
-
-Built for Railway deployment with persistent `/app/data` volume.
-
-For issues, check logs with:
-```bash
-railway logs
-```
+**Timeout errors:**
+- Vercel free tier has 10s function timeout
+- Pro tier has 60s
+- Heavy broadcasts may timeout — Railway is better for this
