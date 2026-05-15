@@ -636,6 +636,11 @@ def kb_back(to: str = "u_back") -> InlineKeyboardMarkup:
 def kb_cancel(cb: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=cb)]])
 
+# Shortcut aliases used throughout admin / creator handlers
+def kb_admin_back()   -> InlineKeyboardMarkup: return kb_back("a_panel")
+def kb_creator_back() -> InlineKeyboardMarkup: return kb_back("c_dash")
+def kb_user_back()    -> InlineKeyboardMarkup: return kb_back("u_back")
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CORE UNLOCK FLOW  (/start deep links + verify)
